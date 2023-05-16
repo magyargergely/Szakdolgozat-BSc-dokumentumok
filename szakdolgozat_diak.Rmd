@@ -1,0 +1,54 @@
+---
+title: "Szakdolgozat - Diák"
+author: "Magyar Gergely"
+date: "2023.05.16."
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+
+library(tidyverse)
+library(caret)
+```
+
+## Egyedi seed Neptun-kód alapján
+```{r}
+generate_seed <- function(id) {
+  # A Neptun-kód raw bitekké alakítása
+  id_raw <- charToRaw(id)
+  
+  # A bitek numerikus értékekké alakítása
+  id_num <- as.numeric(id_raw)
+  
+  # Numerikus értékek összege
+  id_sum <- sum(id_num)
+  
+  # Seed beállítása
+  set.seed(id_sum)
+  
+  # Teszteléshez
+  return(id_sum)
+}
+```
+
+Az alábbi kódrészletben kell a diáknak beírnia a Neptun-kódját az id változóba. Ennek a segítségével tud a generate_seed függvény egyedi seedet generálni.
+
+```{r}
+id <- "BJ3KSF"
+generate_seed(id)
+```
+
+## Egyedi ellenőrző adatok kiválasztása Neptun-kód alapján
+
+A hallgatók az alábbi kódot lefuttatva a 901 ellenőrző adatból kapnak 200 címkézetlen adatot. Ugyan feltehetőleg lesz átfedés egyes diákok adatai között, azonban teljesen megegyező adatsort nem fognak kapni, így lecsökkentve a csalás lehetőségét.
+
+```{r}
+email_newdata_no_labels <- read.csv("email_newdata_no_labels.csv")
+
+email_newdata_no_labels_validation <- email_newdata_no_labels[sample(nrow(email_newdata_no_labels), 200),]
+write.csv(email_newdata_no_labels_validation,"email_newdata_no_labels_validation.csv")
+```
+
+Ezek után a hallgató az email_data.csv-ben feltöltött címkézett adatokon elkészítheti a modelljét, majd az ebben a dokumentumban létrehozott email_newdata_no_labels_validation adatsoron kell prediktálnia a 200 adatpont értékét. A modellek létrehozását már nem szükséges ebben az RMarkdown file-ban elvégezni, csak a végső, prediktált .csv első oszlopának a spam oszlopnak kell lennie a megfelelően automatizálható tanári értékelés végett.

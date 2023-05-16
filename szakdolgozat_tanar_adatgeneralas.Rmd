@@ -1,0 +1,70 @@
+---
+title: "Szakdolgozat - Tanár adatgeneráló kód"
+author: "Magyar Gergely"
+date: "2023.05.16."
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+set.seed(123)
+
+library(tidyverse)
+library(caret)
+```
+
+## Címkézett adatok szétszedése
+
+Az eredeti adatban, amely ki volt adva a diákoknak, 3901 megfigyelés található. Ebből fogok a következtőkben leválasztani 3000 címkézett adatot, amelyet a diákok is megkapnak, hogy ezen készítsék el a gépi tanulási modelljüket. A maradék 901 adatponthoz egyéni azonosítót rendelek, ezt a diákok címkézetlenül kapják meg, viszont a tanárnál meglesznek a címkék, így utólag lehetséges lesz összekapcsolni az ellenőrzéshez.
+
+```{r}
+email_data_full <- read.csv("email_data_original.csv")
+
+train_indices <- createDataPartition(email_data_full$spam, p = 2999/nrow(email_data_full), list = FALSE, times = 1)
+
+email_data <- email_data_full[train_indices, ]
+
+email_newdata_labels <- email_data_full[-train_indices, ]
+
+table(email_data_full$spam)
+table(email_data$spam)
+table(email_newdata_labels$spam)
+```
+
+## Titkos azonosító létrehozása az ellenőrző adatokhoz
+
+Az ellenőrző adatokat a hallgatók randomizálva kapják majd meg, a 901 adatból mindenki fog kapni 200-at egyedileg. Ahhoz, hogy az általuk felcímkézett adatokat le lehessen ellenőrizni, létrehozok egy 10 karakterből álló azonosítót, amely kulcsként fog funkcionálni, viszont csak a tanárnál lesznek meg a címkék, így csak ő lesz képes leelenőrizni.
+
+```{r}
+rand_chars <- c(letters, LETTERS, 0:9)
+ids <- vector(length=nrow(email_newdata_labels))
+
+for (i in 1:nrow(email_newdata_labels)) {
+  ids[i] <- paste0(sample(rand_chars, 10, replace = TRUE), collapse = "")
+}
+
+# Azonosítók hozzáadása az adatbázishoz
+email_newdata_labels$ID <- ids
+
+```
+
+Az alábbi kód azt validálja, hogy valóban sikerült-e az összes sornak egyedi azonosítót megadni. 3901 egyedi érték van, amely megegyezik az elemszámmal.
+
+```{r}
+email_newdata_labels %>% distinct(ID) %>% nrow()
+```
+
+## A hallgatóknak kiosztott végső adatsorok elkészítése
+
+A létrehozott három .csv file közül az email_train_data.csv tartalmazza a felcímkézett adatokat, amelyen a hallgatóknak el kell készíteniük a klasszifikációs modellt. Az email_test_data_teacher file-ban az ellenőrző adatok felcímkézve találhatók meg, míg az email_test_data_student.csv-ben címkézetlenül. Ez utóbbit kapják meg a hallgatók (az email_train_data.csv mellett), amelyen prediktálniuk kell majd az osztályát az adatpontoknak.
+
+```{r}
+email_newdata_no_labels <- email_newdata_labels
+email_newdata_no_labels$spam <- NULL # Címkék eltávolítása
+
+write.csv(email_data, "email_data.csv", row.names = FALSE)
+write.csv(email_newdata_labels, "email_newdata_labels.csv", row.names = FALSE)
+write.csv(email_newdata_no_labels, "email_newdata_no_labels.csv", row.names = FALSE)
+```
+

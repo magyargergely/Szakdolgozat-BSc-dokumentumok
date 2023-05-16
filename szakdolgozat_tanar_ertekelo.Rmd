@@ -1,0 +1,123 @@
+---
+title: "Szakdolgozat - Tanár - Értékelő kód"
+author: "Magyar Gergely"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+set.seed(2023)
+
+library(tidyverse)
+```
+
+## Prediktált ellenőrző adatok létrehozása az adatbeolvasás teszteléséhez
+
+Ez a rész csak a későbbi kódok ellenőrzésére szolgál, a tanár majd képes lesz letölteni Moodle-ból a mappastruktúrát a feltöltött csv file-okkal.
+
+```{r}
+email_newdata_no_labels <- read.csv("email_newdata_no_labels.csv")
+
+# 200 adatpont kiválasztásának leszimulálása
+email_newdata_no_labels <- email_newdata_no_labels[sample(nrow(email_newdata_no_labels),200), ]
+
+dir_students <- "./beolvasas_proba"
+
+assign_spam <- function(df) {
+  df %>%
+    mutate(spam = sample(c("spam", "not_spam"), size = nrow(df), replace = TRUE))
+}
+
+folders <- list.dirs(dir_students, recursive = FALSE)
+for (folder in folders) {
+  student_data <- email_newdata_no_labels %>%
+    assign_spam() %>%
+    write_csv(file.path(folder, "email_newdata_with_spam.csv"))
+}
+```
+
+Ezzel a kóddal leszimuláltam azt a helyzetet, amikor a hallgatói feltöltéseket letölti a tanár a Moodle felületről egy tömörített mappába. Ezt a mappát kicsomagolva az aktuális working directory-be folytatható az értékelés. 
+
+## Hallgatói .csv file-ok beolvasása
+
+A mappastruktúra letölthető a Moodle rendszeréből, amelyben a letöltött mappában minden egyes hallgatónak van egy külön almappája, amely elnevezésében benne van a hallgató neve. Az alábbi kód abban az esetben működőképes, ha a mappában csak 1 db .csv file van. Ha más kiterjesztésű file az nem probléma, és ennek a módszernek az előnye, hogy a feltöltött .csv elnevezése bármilyen lehet, a kód a hallgató nevét hozzárendeli a beolvasott adattáblákhoz.
+
+```{r}
+# A fileokat tartalmazó subfolderek elérési útja
+dir_students <- "./beolvasas_proba/"
+
+# A subfolderek neveinek listába gyűjtése
+subfolders <- list.dirs(dir_students, recursive = FALSE)
+
+# Végigmegy az összes subfolderen, és kiírja a CSV fileok tartalmát külön data framekbe
+for (i in seq_along(subfolders)) {
+  
+  # A hallgatók neveinek kiszedése külön változóba
+  example_name <- sub("_.*$", "", basename(subfolders[i]))
+  
+  prefix <- sprintf("%02d", i)
+  df_name <- paste0(prefix, "_", example_name)
+  
+  # A mappán belüli CSV file elérési útja
+  csv_file_path <- file.path(subfolders[i], dir(subfolders[i], pattern = "*.csv"))
+  
+  # CSV file beolvasása data frame-be
+  df <- read.csv(csv_file_path)
+  
+  # A hallgató nevének hozzárendelése a data frame-hez
+  assign(df_name, df)
+}
+```
+
+## Hallgatói eredmények összevetése a valódi osztályokkal
+
+A hallgatók által feltöltött .csv file-okban az ID oszlop az általuk nem beazonosítható kulcs. Az alábbi kódrészlet 
+
+```{r}
+# Az ellenőrző adattábla betöltése
+email_newdata_labels <- read.csv("email_newdata_labels.csv")
+email_newdata_labels <- email_newdata_labels %>% rename("label" = "spam")
+
+# Az ellenőrző adattábla összekapcsolása a betöltött .csv fileokkal
+df_list <- ls(pattern = "^\\d+_")
+
+for (df_name in df_list) {
+  df <- get(df_name)
+  df <- merge(df, email_newdata_labels[, c("ID", "label")], by = "ID")
+  assign(df_name, df)
+}
+```
+
+## Modellek értékelése
+
+A hallgatói klasszifikációs modellek kiértékelhetőek a következő mutatók segítségével: accuracy, precision, recall. A következő kód kiszámolja az összes megoldásra, és egy összegző táblában értékeli.
+
+```{r}
+results <- list()
+
+for (df_name in ls(pattern = "^\\d{2}_")) {
+  df <- get(df_name)
+  
+  prefix <- substr(df_name, 1, 2)
+  row_name <- substr(df_name, 4, nchar(df_name))
+  
+  tp <- sum(df$spam == "spam" & df$label == "spam")
+  fp <- sum(df$spam == "spam" & df$label == "not_spam")
+  tn <- sum(df$spam == "not_spam" & df$label == "not_spam")
+  fn <- sum(df$spam == "not_spam" & df$label == "spam")
+  
+  accuracy <- (tp + tn)/(tp + fp + fn + tn)
+  precision <- tp / (tp + fp)
+  recall <- tp / (tp + fn)
+  specificity <- tn / (tn + fp)
+  
+  eval_df <- data.frame(Name = row_name, Accuracy = accuracy, Precision = precision, Recall = recall, Specificity = specificity)
+  
+  results[[prefix]] <- eval_df
+}
+
+evaluation_df <- bind_rows(results)
+```
+
